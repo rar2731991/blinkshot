@@ -6,6 +6,7 @@ import PictureIcon from "@/components/icons/picture-icon";
 import XIcon from "@/components/icons/x-icon";
 import Logo from "@/components/logo";
 import Spinner from "@/components/spinner";
+import DownloadButton from "@/components/download-button";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -270,6 +271,16 @@ export default function Home() {
                   alt=""
                   className={`${isFetching ? "animate-pulse" : ""} max-w-full rounded-lg object-cover shadow-sm shadow-black`}
                 />
+                <div className="mt-3 flex justify-center">
+                  <DownloadButton
+                    imageData={activeImage.b64_json}
+                    prompt={activeIndex !== undefined ? generations[activeIndex].prompt : prompt}
+                    onDownload={() => {
+                      // Optional: Add analytics or user feedback here
+                      console.log('Image downloaded successfully');
+                    }}
+                  />
+                </div>
               </div>
 
               <div className="mt-4 flex gap-4 overflow-x-scroll pb-4">
