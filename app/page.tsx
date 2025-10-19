@@ -42,6 +42,11 @@ type ImageResponse = {
   timings: { inference: number };
 };
 
+type MultipleImageResponse = {
+  images: ImageResponse[];
+  timings: { inference: number };
+};
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [iterativeMode, setIterativeMode] = useState(false);
@@ -55,13 +60,14 @@ export default function Home() {
   const [selectedStyleValue, setSelectedStyleValue] = useState("");
   const debouncedPrompt = useDebounce(prompt, 350);
   const [generations, setGenerations] = useState<
-    { prompt: string; image: ImageResponse }[]
+    { prompt: string; images: ImageResponse[] }[]
   >([]);
   let [activeIndex, setActiveIndex] = useState<number>();
+  let [activeImageIndex, setActiveImageIndex] = useState<number>(0);
 
   const selectedStyle = imageStyles.find((s) => s.value === selectedStyleValue);
 
-  const { data: image, isFetching } = useQuery({
+  const { data: imageResponse, isFetching } = useQuery({
     placeholderData: (previousData) => previousData,
     queryKey: [debouncedPrompt + selectedStyleValue],
     queryFn: async () => {
@@ -81,7 +87,7 @@ export default function Home() {
       if (!res.ok) {
         throw new Error(await res.text());
       }
-      return (await res.json()) as ImageResponse;
+      return (await res.json()) as MultipleImageResponse;
     },
     enabled: !!debouncedPrompt.trim(),
     staleTime: Infinity,
@@ -91,11 +97,12 @@ export default function Home() {
   let isDebouncing = prompt !== debouncedPrompt;
 
   useEffect(() => {
-    if (image && !generations.map((g) => g.image).includes(image)) {
-      setGenerations((images) => [...images, { prompt, image }]);
+    if (imageResponse && !generations.find(g => g.images.some(img => imageResponse.images.some(respImg => img.b64_json === respImg.b64_json)))) {
+      setGenerations((prev) => [...prev, { prompt, images: imageResponse.images }]);
       setActiveIndex(generations.length);
+      setActiveImageIndex(0);
     }
-  }, [generations, image, prompt]);
+  }, [generations, imageResponse, prompt]);
 
   useEffect(() => {
     if (userAPIKey) {
@@ -105,8 +112,8 @@ export default function Home() {
     }
   }, [userAPIKey]);
 
-  let activeImage =
-    activeIndex !== undefined ? generations[activeIndex].image : undefined;
+  let activeGeneration = activeIndex !== undefined ? generations[activeIndex] : undefined;
+  let activeImage = activeGeneration?.images[activeImageIndex];
 
   return (
     <div className="flex h-full flex-col">
@@ -254,7 +261,7 @@ export default function Home() {
                 Generate images in real-time
               </p>
               <p className="mt-4 text-balance text-sm text-gray-300 md:text-base lg:text-lg">
-                Enter a prompt and generate images in milliseconds as you type.
+                Enter a prompt and generate 4 images in milliseconds as you type.
                 Powered by Flux on Together AI.
               </p>
             </div>
@@ -272,25 +279,66 @@ export default function Home() {
                 />
               </div>
 
-              <div className="mt-4 flex gap-4 overflow-x-scroll pb-4">
-                {generations.map((generatedImage, i) => (
-                  <button
-                    key={i}
-                    className="w-32 shrink-0 opacity-50 hover:opacity-100"
-                    onClick={() => setActiveIndex(i)}
-                  >
-                    <Image
-                      placeholder="blur"
-                      blurDataURL={imagePlaceholder.blurDataURL}
-                      width={1024}
-                      height={768}
-                      src={`data:image/png;base64,${generatedImage.image.b64_json}`}
-                      alt=""
-                      className="max-w-full rounded-lg object-cover shadow-sm shadow-black"
-                    />
-                  </button>
-                ))}
-              </div>
+              {/* Display all 4 images from current generation */}
+              {activeGeneration && (
+                <div className="mt-4">
+                  <p className="mb-2 text-sm text-gray-300">Current Generation ({activeGeneration.images.length} images):</p>
+                  <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+                    {activeGeneration.images.map((image, i) => (
+                      <button
+                        key={i}
+                        className={`relative overflow-hidden rounded-lg ${activeImageIndex === i ? "ring-2 ring-blue-500" : "opacity-70 hover:opacity-100"}`}
+                        onClick={() => setActiveImageIndex(i)}
+                      >
+                        <Image
+                          placeholder="blur"
+                          blurDataURL={imagePlaceholder.blurDataURL}
+                          width={1024}
+                          height={768}
+                          src={`data:image/png;base64,${image.b64_json}`}
+                          alt={`Image ${i + 1}`}
+                          className="aspect-square w-full object-cover shadow-sm shadow-black"
+                        />
+                        <div className="absolute bottom-1 left-1 rounded bg-black/50 px-1 py-0.5 text-xs text-white">
+                          {i + 1}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Previous generations thumbnails */}
+              {generations.length > 0 && (
+                <div className="mt-4">
+                  <p className="mb-2 text-sm text-gray-300">Previous Generations:</p>
+                  <div className="flex gap-4 overflow-x-scroll pb-4">
+                    {generations.map((generatedImages, i) => (
+                      <button
+                        key={i}
+                        className={`w-32 shrink-0 ${activeIndex === i ? "opacity-100 ring-2 ring-blue-500 rounded-lg" : "opacity-50 hover:opacity-100"}`}
+                        onClick={() => {
+                          setActiveIndex(i);
+                          setActiveImageIndex(0);
+                        }}
+                      >
+                        <Image
+                          placeholder="blur"
+                          blurDataURL={imagePlaceholder.blurDataURL}
+                          width={1024}
+                          height={768}
+                          src={`data:image/png;base64,${generatedImages.images[0].b64_json}`}
+                          alt={`Generation ${i + 1}`}
+                          className="max-w-full rounded-lg object-cover shadow-sm shadow-black"
+                        />
+                        <p className="mt-1 text-xs text-gray-400 truncate">
+                          {generatedImages.prompt.slice(0, 30)}...
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

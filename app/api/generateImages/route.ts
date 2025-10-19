@@ -71,6 +71,7 @@ export async function POST(req: Request) {
       height: 768,
       seed: iterativeMode ? 123 : undefined,
       steps: 3,
+      n: 4, // Generate 4 images
       // @ts-expect-error - this is not typed in the API
       response_format: "base64",
     });
@@ -84,7 +85,10 @@ export async function POST(req: Request) {
     );
   }
 
-  return Response.json(response.data[0]);
+  return Response.json({
+    images: response.data, // Return all 4 images
+    timings: response.data[0]?.timings || { inference: 0 }
+  });
 }
 
 export const runtime = "edge";
