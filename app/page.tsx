@@ -42,6 +42,10 @@ type ImageResponse = {
   timings: { inference: number };
 };
 
+type MultiImageResponse = {
+  images: ImageResponse[];
+};
+
 export default function Home() {
   const [prompt, setPrompt] = useState("");
   const [iterativeMode, setIterativeMode] = useState(false);
@@ -55,13 +59,13 @@ export default function Home() {
   const [selectedStyleValue, setSelectedStyleValue] = useState("");
   const debouncedPrompt = useDebounce(prompt, 350);
   const [generations, setGenerations] = useState<
-    { prompt: string; image: ImageResponse }[]
+    { prompt: string; images: ImageResponse[] }[]
   >([]);
   let [activeIndex, setActiveIndex] = useState<number>();
 
   const selectedStyle = imageStyles.find((s) => s.value === selectedStyleValue);
 
-  const { data: image, isFetching } = useQuery({
+  const { data: imageResponse, isFetching } = useQuery({
     placeholderData: (previousData) => previousData,
     queryKey: [debouncedPrompt + selectedStyleValue],
     queryFn: async () => {
@@ -81,7 +85,7 @@ export default function Home() {
       if (!res.ok) {
         throw new Error(await res.text());
       }
-      return (await res.json()) as ImageResponse;
+      return (await res.json()) as MultiImageResponse;
     },
     enabled: !!debouncedPrompt.trim(),
     staleTime: Infinity,
@@ -90,12 +94,15 @@ export default function Home() {
 
   let isDebouncing = prompt !== debouncedPrompt;
 
+  let [selectedImageIndex, setSelectedImageIndex] = useState(0);
+
   useEffect(() => {
-    if (image && !generations.map((g) => g.image).includes(image)) {
-      setGenerations((images) => [...images, { prompt, image }]);
+    if (imageResponse && !generations.map((g) => g.images).flat().some(img => imageResponse.images.includes(img))) {
+      setGenerations((images) => [...images, { prompt, images: imageResponse.images }]);
       setActiveIndex(generations.length);
+      setSelectedImageIndex(0); // Reset to first image when new batch arrives
     }
-  }, [generations, image, prompt]);
+  }, [generations, imageResponse, prompt]);
 
   useEffect(() => {
     if (userAPIKey) {
@@ -105,8 +112,8 @@ export default function Home() {
     }
   }, [userAPIKey]);
 
-  let activeImage =
-    activeIndex !== undefined ? generations[activeIndex].image : undefined;
+  let activeGeneration = activeIndex !== undefined ? generations[activeIndex] : undefined;
+  let activeImage = activeGeneration ? activeGeneration.images[selectedImageIndex] : undefined;
 
   return (
     <div className="flex h-full flex-col">
@@ -272,19 +279,51 @@ export default function Home() {
                 />
               </div>
 
+              {/* Show all 4 images from the current generation */}
+              {activeGeneration && (
+                <div className="mt-4 grid grid-cols-2 gap-2">
+                  {activeGeneration.images.map((img, i) => (
+                    <button
+                      key={i}
+                      className={`relative transition ${selectedImageIndex === i ? "ring-2 ring-blue-400" : "opacity-70 hover:opacity-100"}`}
+                      onClick={() => setSelectedImageIndex(i)}
+                    >
+                      <Image
+                        placeholder="blur"
+                        blurDataURL={imagePlaceholder.blurDataURL}
+                        width={512}
+                        height={384}
+                        src={`data:image/png;base64,${img.b64_json}`}
+                        alt={`Variation ${i + 1}`}
+                        className="w-full rounded-lg object-cover shadow-sm shadow-black"
+                      />
+                      {selectedImageIndex === i && (
+                        <div className="absolute -top-2 -right-2 bg-blue-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs font-bold">
+                          ✓
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* Show previous generations */}
               <div className="mt-4 flex gap-4 overflow-x-scroll pb-4">
-                {generations.map((generatedImage, i) => (
+                {generations.map((generatedImageSet, i) => (
                   <button
                     key={i}
-                    className="w-32 shrink-0 opacity-50 hover:opacity-100"
-                    onClick={() => setActiveIndex(i)}
+                    className={`w-32 shrink-0 transition ${activeIndex === i ? "ring-2 ring-blue-400" : "opacity-50 hover:opacity-100"}`}
+                    onClick={() => {
+                      setActiveIndex(i);
+                      setSelectedImageIndex(0);
+                    }}
                   >
                     <Image
                       placeholder="blur"
                       blurDataURL={imagePlaceholder.blurDataURL}
                       width={1024}
                       height={768}
-                      src={`data:image/png;base64,${generatedImage.image.b64_json}`}
+                      src={`data:image/png;base64,${generatedImageSet.images[0].b64_json}`}
                       alt=""
                       className="max-w-full rounded-lg object-cover shadow-sm shadow-black"
                     />

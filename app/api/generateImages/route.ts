@@ -62,18 +62,23 @@ export async function POST(req: Request) {
     prompt += `. Use a ${style} style for the image.`;
   }
 
-  let response;
+  let responses;
   try {
-    response = await client.images.create({
-      prompt,
-      model: "black-forest-labs/FLUX.1-schnell",
-      width: 1024,
-      height: 768,
-      seed: iterativeMode ? 123 : undefined,
-      steps: 3,
-      // @ts-expect-error - this is not typed in the API
-      response_format: "base64",
-    });
+    // Generate four images simultaneously
+    const imagePromises = Array.from({ length: 4 }, (_, index) =>
+      client.images.create({
+        prompt,
+        model: "black-forest-labs/FLUX.1-schnell",
+        width: 1024,
+        height: 768,
+        seed: iterativeMode ? 123 + index : undefined, // Slight variation in seeds for iterative mode
+        steps: 3,
+        // @ts-expect-error - this is not typed in the API
+        response_format: "base64",
+      })
+    );
+
+    responses = await Promise.all(imagePromises);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } catch (e: any) {
     return Response.json(
@@ -84,7 +89,10 @@ export async function POST(req: Request) {
     );
   }
 
-  return Response.json(response.data[0]);
+  // Return all four images
+  return Response.json({
+    images: responses.map(response => response.data[0])
+  });
 }
 
 export const runtime = "edge";
